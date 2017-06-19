@@ -1,0 +1,28 @@
+{
+  "name": "n-practice",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+      "start": "node app.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lukeschuyler/nightmare-practice.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lukeschuyler/nightmare-practice.git"
+  },
+  "homepage": "https://github.com/oscarmorrison/nightmare-heroku",
+  "dependencies": {
+    "electron": "^1.6.10",
+    "nightmare": "^2.10.0",
+    "express": "^4.15.3",
+    "body-parser": "^1.17.2"
+  },
+  "engines": {
+    "node": "7.5.0"
+  }
+}
