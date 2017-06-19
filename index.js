@@ -1,5 +1,4 @@
-const Nightmare = require('nightmare');   
-const nightmare = Nightmare({ show: true });
+
 // const nightmare = Nightmare();
 const express = require('express')
 const app = express()
@@ -9,10 +8,12 @@ app.use(json())
 app.use(urlencoded({ extended: false }));
 
 app.get('/', (req, res, next) => {
+  const Nightmare = require('nightmare');   
+  const nightmare = Nightmare();
   console.log('getting')
   nightmare
   .goto('https://duckduckgo.com')
-  .type('#search_form_input_homepage', 'github nightmare')
+  .insert('#search_form_input_homepage', 'github nightmare')
   .click('#search_button_homepage')
   .wait(10000)
   .evaluate(function () {
@@ -24,7 +25,9 @@ app.get('/', (req, res, next) => {
     .end()
   })
   .catch(err => {
-    console.log(err)
+    console.log("err", err)
+    nightmare
+    .end()
   })
 });
 
