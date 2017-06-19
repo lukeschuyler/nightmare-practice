@@ -15,7 +15,7 @@ app.get('/', (req, res, next) => {
   .click('#search_button_homepage')
   .wait(10000)
   .evaluate(function () {
-    return document.querySelector('#zero_click_wrapper .c-info__title a').href
+    return document.querySelector('#zero_click_wrapper .c-info__title a').innerText
   })
   .then(link => {
     res.status(200).json({ link })
