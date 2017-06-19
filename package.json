@@ -1,10 +1,10 @@
 {
-  "name": "n-practice",
+  "name": "nightmare-practice",
   "version": "1.0.0",
   "description": "",
-  "main": "app.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node app.js"
+      "start": "node index.js"
   },
   "repository": {
     "type": "git",
@@ -24,19 +24,5 @@
   },
   "engines": {
     "node": "7.5.0"
-  },
-  "buildpacks": [
-      {
-          "url": "https://github.com/heroku/heroku-buildpack-apt"
-      },
-      {
-          "url": "https://github.com/captain401/heroku-buildpack-xvfb.git"
-      },
-      {
-          "url": "https://github.com/benschwarz/heroku-electron-buildpack.git"
-      },
-      {
-          "url": "https://github.com/heroku/heroku-buildpack-nodejs.git"
-      }
-  ]
+  }
 }
