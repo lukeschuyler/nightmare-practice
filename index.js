@@ -1,19 +1,19 @@
 const express = require('express')
 const app = express()
+const Nightmare = require('nightmare');   
 const { json, urlencoded } = require('body-parser');
 
 app.use(json())
 app.use(urlencoded({ extended: false }));
 
 app.post('/', (req, res, next) => {
-  const Nightmare = require('nightmare');   
-  const nightmare = Nightmare();
+  const nightmare = Nightmare({ show: false });
   nightmare
   .goto('https://duckduckgo.com')
   .insert('#search_form_input_homepage', req.body.query)
   .click('#search_button_homepage')
   .wait(10000)
-  .evaluate(function () {
+  .evaluate(() => {
     return document.querySelector('#zero_click_wrapper .c-info__title a').href
   })
   .then(link => {
