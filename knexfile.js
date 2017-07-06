@@ -31,6 +31,10 @@ module.exports = {
     connection: process.env.DATABASE_URL,
     migrations: {
       directory: __dirname + '/app/db/migrations'
+    },
+    pool: {
+      min: 2,
+      max: 10
     }
   }
 };
