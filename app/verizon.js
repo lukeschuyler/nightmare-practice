@@ -5,6 +5,13 @@ const { parsePhoneLines,
         getNumberLineVerizon,
         parseAddressVerizon } = require('./parseVerizon.js')
 
+const Bill = require('./models/bill_mod.js')
+const LineItem = require('./models/line_item_mod.js')
+const Usage = require('./models/usage_mod.js')
+const UsageLine = require('./models/usage_line_mod.js')
+const User = require('./models/user_mod.js')
+const Line = require('./models/line_mod.js')
+
 module.exports.crawlVerizon = (req, response, next) => {
   // const nightmare = Nightmare({ show: true });
   const nightmare = Nightmare();

@@ -8,15 +8,31 @@ const { parsePhoneLines,
         parseSurcharges,
         parseSurchargesJoint } = require('./parseATT.js')
 
+const Bill = require('./models/bill_mod.js')
+const LineItem = require('./models/line_item_mod.js')
+const Usage = require('./models/usage_mod.js')
+const UsageLine = require('./models/usage_line_mod.js')
+const User = require('./models/user_mod.js')
+const Line = require('./models/line_mod.js')
+
 const Nightmare = require('nightmare');   
 
-let longWait = 12000
 
 module.exports.crawlAtt = (req, response, next) => {
+  let longWait = 12000
   console.log(longWait)
   // const nightmare = Nightmare({ show: true });
   const nightmare = Nightmare();
   let data = {}
+  let id;
+  let billId;
+  let lineIdArray;
+  data.user = {}
+  data.line = {}
+  data.lineItem = {}
+  data.usage = {}
+  data.usageLine = {}
+  data.bill = {}
   const userName = req.body.userName.replace(/-/g, '')
   const password = req.body.password
   const billDate = req.body.billDate
@@ -62,7 +78,7 @@ module.exports.crawlAtt = (req, response, next) => {
     .evaluate(() => document.querySelector('.alert-error').innerText)
     .then(res => {
       console.log(res)
-      // nightmare.end()
+      nightmare.end()
       response.status(404).json({ message: "User credentials incorrect" })
     })
     .catch(err => {
@@ -113,34 +129,6 @@ module.exports.crawlAtt = (req, response, next) => {
     })
   }
 
-  // Travel to bill page, see what billpage layout they have (joint, or just phone, represented by ACCORDIAN)
-
-  const goToBillPage = () => {
-    console.log('logged in as ' + userName)
-    nightmare
-    .goto('https://www.att.com/olam/passthroughAction.myworld?actionType=ViewBillDetails')
-    .wait(longWait)
-    .evaluate(() => document.querySelector('#billDetailsAccordion').innerText)
-    .then(res => {
-      getBillIfAccordion()
-    })
-    .catch(err => {
-      nightmare
-      .evaluate(() => document.querySelector('#tabcontent').innerText)
-      .then(res => {
-        let string = res.toString().replace(/\n/g, ' ').replace(/\s\s+/g, ' ')
-        let accountNumber = string.split(' ')[2] == 'Combined' ? string.split(' ')[4] : string.split(' ')[2]
-        // console.log(string)
-        data.accountNumber = accountNumber
-        data.lines = parsePhoneLines(string)
-        getLineItemsJointBill()
-      })
-      .catch(err => {
-        getBillIfAccordion()
-      })
-    })
-  }
-
   const findAddressTab = () => {
     console.log('getting address')
     nightmare
@@ -168,7 +156,7 @@ module.exports.crawlAtt = (req, response, next) => {
     .evaluate(() => Array.from(document.querySelectorAll('#billingStreet .span12 .form-row p'))[1].innerText)
     .then(res => {
       console.log(res)
-      data.address = res
+      data.user.address = res
       goToBillPage()
     })
     .catch(err => {
@@ -179,9 +167,65 @@ module.exports.crawlAtt = (req, response, next) => {
     })
   }
 
+  // Travel to bill page, see what billpage layout they have (joint, or just phone, represented by ACCORDIAN)
+
+  const goToBillPage = () => {
+    console.log('logged in as ' + userName)
+    nightmare
+    .goto('https://www.att.com/olam/passthroughAction.myworld?actionType=ViewBillDetails')
+    .wait(longWait)
+    .evaluate(() => document.querySelector('#billDetailsAccordion').innerText)
+    .then(res => {
+      getBillIfAccordion()
+    })
+    .catch(err => {
+      nightmare
+      .evaluate(() => document.querySelector('#tabcontent').innerText)
+      .then(res => {
+        getBillJointBill(res)
+      })
+      .catch(err => {
+        getBillIfAccordion()
+      })
+    })
+  }
+
   ///////////////////////////////////////////////////
   // Next section pertains to the joint bill layout//
   ///////////////////////////////////////////////////
+
+  const getBillJointBill = (res) => {
+    let string = res.toString().replace(/\n/g, ' ').replace(/\s\s+/g, ' ')
+    let accountNumber = string.split(' ')[2] == 'Combined' ? string.split(' ')[4] : string.split(' ')[2]
+    data.lines = parsePhoneLines(string)
+    // console.log(string)
+    // data.user.accountNumber = accountNumber
+    checkUser(accountNumber, addLinesToDbJoint)
+    .catch(error => {
+      console.log(error)
+    })
+  }
+
+  const addLinesToDbJoint = () => {
+    Promise.all(data.lines.map((l, i) => Line.addLine({bill_id: billId, user_id: id, number: l.number, name: l.name})))
+    .then(res => {
+      console.log("ids: ", res)
+      let lineResArray = res.map(l => l.toJSON())
+      lineIdArray = lineResArray.map((l, i) => l.id)
+      getLineItemsJointBill()
+    })
+  }
+
+  const populateLineArrays = (res) => {
+    let lines = data.lines
+    data.monthlyCharges = []
+    data.surcharges = []
+    // console.log(res)
+    lines.forEach((line, i) => {
+      data.monthlyCharges.push(parseLineItemsJoint(res.monthly[i], line.number))
+      data.surcharges.push(parseLineItemsJoint(res.surcharges[i], line.number))
+    })
+  }
 
   const getLineItemsJointBill = () => {
     let lines = data.lines
@@ -190,12 +234,8 @@ module.exports.crawlAtt = (req, response, next) => {
     .click('#accordplusAll')
     .wait(1000)
     .evaluate((lines) => {
-      let monthly = lines.map((l, i) => {
-        return document.querySelector(`#toggleMNTHCHRG${l.number}${i}T`).innerText
-      })
-      let surcharges = lines.map((l, i) => {
-        return document.querySelector(`#toggleSrchgFees${l.number}${i}T`).innerText
-      })
+      let monthly = lines.map((l, i) => document.querySelector(`#toggleMNTHCHRG${l.number}${i}T`).innerText)
+      let surcharges = lines.map((l, i) => document.querySelector(`#toggleSrchgFees${l.number}${i}T`).innerText)
       // let govt = lines.map((l, i) => {
       //   return document.querySelector(`#toggleGVTFEE${l.number}${i}T`).innerText
       // })  
@@ -203,13 +243,7 @@ module.exports.crawlAtt = (req, response, next) => {
       return data
     }, lines)
     .then(res => {
-      data.monthlyCharges = []
-      data.surcharges = []
-      console.log(res)
-      lines.forEach((line, i) => {
-        data.monthlyCharges.push(parseLineItemsJoint(res.monthly[i], line.number))
-        data.surcharges.push(parseLineItemsJoint(res.surcharges[i], line.number))
-      })
+      populateLineArrays(res)
       getUsageTabContent()
     })
     .catch(err => {
@@ -233,7 +267,6 @@ module.exports.crawlAtt = (req, response, next) => {
     })
   }
 
-
   const getUsageByTime = () => {
     nightmare
     .click('#timeRange')
@@ -256,9 +289,23 @@ module.exports.crawlAtt = (req, response, next) => {
     })
   }
 
+
   const checkBillDate = (dateTitle) => {
-   console.log("billing month: ", dateTitle[0])
+    console.log("billing month: ", dateTitle[0])
     data.billingMonth = dateTitle[0]
+    Bill.addBill({user_id: id, bill_date: data.billingMonth})
+    .then(res => {
+      let bill = res.toJSON()
+      billId = bill.id
+      console.log("billId: ", billId)
+      addLineItemsToDb()
+      .then(res => {
+        determineUsageDate(dateTitle)
+      })
+    })
+  }
+
+  const determineUsageDate = (dateTitle) => {
     if(billDate && dateTitle != null) {
       nightmare
       .click(`A[title="${dateTitle[0]}"]`)
@@ -272,7 +319,7 @@ module.exports.crawlAtt = (req, response, next) => {
       .catch(err => {
         console.log(err)
       })
-    } else if(billDate && dateTitle == null) {
+    } else if (billDate && dateTitle == null) {
       getUsageTabContent()
     } else {
       extractUsage()
@@ -302,7 +349,7 @@ module.exports.crawlAtt = (req, response, next) => {
 
   const getBillIfAccordion = () => {
     console.log('getting bill')
-    if(!billDate){
+    if(!billDate) {
       checkBorderBox()
     } else {
       nightmare
@@ -311,7 +358,7 @@ module.exports.crawlAtt = (req, response, next) => {
       .then(res => {
         accountNumber = res.split(' ')[2].replace(/\n+/g, '')
         data.accountNumber = accountNumber
-        changeDateAccordion()
+        checkUser(accountNumber, changeDateAccordion)
       })
       .catch(err => {
         console.log("error from ifaccordian: ", err)
@@ -328,10 +375,8 @@ module.exports.crawlAtt = (req, response, next) => {
     .then(res => {
       let usage = res.toString().replace(/\n/g, ' ').replace(/\s\s+/g, ' ')
       data.usage = getUsage(usage) ? getUsage(usage) : 'Usage not available for ' + billingMonth
-      data.billingMonth = billingMonth
-      // console.log(data)
-      response.status(200).json(data)
-      nightmare.end()
+      console.log("data.usage: ", data.usage)
+      addUsageToDb()
     })
     .catch(err => {
       console.log("single line?", err)
@@ -339,7 +384,31 @@ module.exports.crawlAtt = (req, response, next) => {
     })
   }
 
+  const addUsageToDb = () => {
+    Usage.addUsage({bill_id: billId, total_used: data.usage.totalUsage, total_max: data.usage.usageMax})
+    .then(res => {
+      data.billingMonth = billingMonth
+      let usage = res.toJSON()
+      console.log(usage)
+      let usageId = usage.id
+      if (data.usage.usageBreakdown) {
+        Promise.all(data.usage.usageBreakdown.map((u, i) => {
+          return UsageLine.addUsageLine({usage_id: usageId, line_id: lineIdArray[i], usage_amount: u.monthlyUsage})
+        }))
+        .then(res => {
+          // console.log(data)
+          response.status(200).json(data)
+          nightmare.end()
+        })
+      } else {
+        response.status(200).json(data)
+        nightmare.end()
+      }
+    })
+  }
+
   const checkIfUsageAvailable = () => {
+    console.log('check if available')
     nightmare
     .evaluate(() => Array.from(document.querySelectorAll('.alert-content')).map(el => el.innerText))
     .then(res => {
@@ -404,22 +473,7 @@ module.exports.crawlAtt = (req, response, next) => {
       return billTitle
     }, monthNum)
     .then(res => {
-      console.log("dates of billing in select box: ", res)
-      billingMonth = res[0]
-      data.billingMonth = billingMonth
-      let link = `li[value="${res[0]}"]`
-      nightmare
-      .click(link)
-      .wait(6000)
-      .evaluate(() => {
-        return
-      })
-      .then(res => {
-        extractUsageAccordian()
-      })
-      .catch(err => {
-        console.log(err)
-      })
+      locateUsageAccoridian(res)
     })
     .catch(err => {
       reset()
@@ -427,6 +481,58 @@ module.exports.crawlAtt = (req, response, next) => {
     })
   }
 
+  const locateUsageAccoridian = (res) => {
+    console.log("dates of billing in select box: ", res)
+    billingMonth = res[0]
+    data.billingMonth = billingMonth
+    Bill.addBill({user_id: id, bill_date: billingMonth})
+    .then(result => {
+      getBillId(result, res)
+    })
+  }
+
+  const getBillId = (result, res) => {
+    let bill = result.toJSON()
+    billId = bill.id
+    // console.log(data.monthlyCharges)
+    addLinesToDb(res)
+  }
+
+  const clickDateSelect = (res) => {
+      addLineItemsToDb()
+      .then(ids => {
+        console.log("ids from sur: ", ids)
+        let link = `li[value="${res[0]}"]`
+        nightmare
+        .click(link)
+        .wait(6000)
+        .evaluate(() => {
+          return
+        })
+        .then(res => {
+          extractUsageAccordian()
+        })
+        .catch(err => {
+          console.log(err)
+        })
+      })
+  }
+
+  const addLineItemsToDb = () => {
+   return Promise.all(data.monthlyCharges.map((l, i) => {
+     return Promise.all(l.items.map((item, j) => {
+        return  LineItem.addItem({user_id: id, bill_id: billId, line_id: lineIdArray[i], title: item.item, amount: item.amount, type: 'Monthly Charges'})
+      }))
+    }))
+    .then(ids => {
+      console.log("ids from month: ", ids)
+       Promise.all(data.surcharges.map((l, i) => {
+       return Promise.all(l.items.map((item, j) => {
+          return  LineItem.addItem({user_id: id, bill_id: billId, line_id: lineIdArray[i], title: item.item, amount: item.amount, type: 'Surcharges'})
+        }))
+      }))
+    })
+  }
 
   const changeDateAccordion = () => {
     nightmare
@@ -481,7 +587,6 @@ module.exports.crawlAtt = (req, response, next) => {
     nightmare
     .evaluate(() => Array.from(document.querySelectorAll('.accord-content-block .margin-bottom20')).map(el => el.innerText))
     .then(res => {
-      console.log("surcharges: ", res)
       data.surcharges = parseSurcharges(res, data.lines)
       changeDateUsage()
     })
@@ -501,15 +606,31 @@ module.exports.crawlAtt = (req, response, next) => {
       let string = res.whole.toString().replace(/\n/g, ' ').replace(/\s\s+/g, ' ')
       let sections = res.sections
       data.monthlyCharges = []
-      // console.log('accord string', string)
       data.lines = parsePhoneLines(string)
       sections.forEach((section, i) => {
         data.monthlyCharges.push(parseLineItems(section, data.lines[i].number))
       })
+      // console.log('accord string', string)
       getSurcharges()
     })
     .catch(err => {
       console.log("err acc panel1: ", err)
+    })
+  }
+
+  const addLinesToDb = (res) => {
+    Promise.all(data.lines.map((l, i) => Line.addLine({bill_id: billId, user_id: id, number: l.number, name: l.name})))
+    .then(result => {
+      let lineResArray = result.map(r => {
+        console.log(r)
+        return r.toJSON()
+      })
+      lineIdArray = lineResArray.map((l, i) => l.id)
+      console.log("lineIdArray: ", lineIdArray)
+      clickDateSelect(res)
+    })
+    .catch(() => {
+      getAccordionPanel1()
     })
   }
 
@@ -524,5 +645,43 @@ module.exports.crawlAtt = (req, response, next) => {
     console.log('Customer no PIN')
     getBillNoPin()
   }
+
+  const checkUser = (number, cb) => {
+    console.log('checking user')
+    return User.findOneByAccountNumber(number)
+    .then(resId => {
+      getUserInfo(resId, cb, number)
+    })
+    .catch(err => {
+      console.log("error: ", err)
+      return User.addUser({user_name: userName, address: data.user.address, account_number: accountNumber, provider: 'ATT'})
+      .then(res => {
+        let user = res
+        id = user.id
+        cb()
+      })
+    })
+  }
+
+  const getUserInfo = (resId, cb, number) => {
+    console.log("resId: ", resId)
+    let userId = resId
+    if(resId) {
+      // console.log(id)
+      console.log("user exists: ", resId)
+      id = userId
+      cb()
+    } else {
+     return User.addUser({user_name: userName, address: data.user.address, account_number: number, provider: 'ATT'})
+      .then(res => {
+        let user = res
+        console.log("no user: ", user)
+        id = user.id
+        console.log("id: ", id)
+        cb()
+      })
+    }
+  }
+
 
 } // END crawlATT

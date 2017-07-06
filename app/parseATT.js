@@ -83,7 +83,7 @@ module.exports.getUsage = (string) => {
 }
 
 module.exports.parseSurcharges = (arr, lineArr) => {
-  console.log(arr)
+  // console.log(arr)
   let chargeArray = []
   let lineIteration = 0
   arr.forEach((c, i) => {
@@ -109,7 +109,6 @@ module.exports.parseLineItems = (string, line) => {
   let chargeArray = []
   billArray.forEach((c, i) => {
     if(c[0] + c[1] == '  ' ) {
-      console.log("c", c)
       c.replace('  ', '')
     }
     if((i % 2) == 1 && billArray[i-1].slice(0,24) != 'Monthly plan charges for') {
