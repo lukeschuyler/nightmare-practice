@@ -121,7 +121,7 @@ module.exports.crawlAtt = (req, response, next) => {
     .evaluate(() => document.querySelector('.alert-error').innerText)
     .then(res => {
       console.log(res)
-      // nightmare.end()
+      nightmare.end()
       response.status(404).json({ message: "User credentials incorrect" })
     })
     .catch(err => {
@@ -161,8 +161,6 @@ module.exports.crawlAtt = (req, response, next) => {
     })
     .catch(err => {
       console.log(err)
-      // data.address = 'Could not locate address'
-      // goToBillPage()
       reset()
     })
   }
@@ -329,12 +327,29 @@ module.exports.crawlAtt = (req, response, next) => {
   const extractUsage = () => {
     nightmare
     .evaluate(() => document.querySelector('#tabcontent').innerText)
-    .end()
     .then(res => {
       let string = res.toString().replace(/\n/g, ' ').replace(/\s\s+/g, ' ')
       // console.log(string)
       data.usage = parseUsage(string)
-      response.status(200).json(data)
+      Usage.addUsage({bill_id: billId, total_used: data.usage.totalUsage, total_max: data.usage.usageMax})
+      .then(res => {
+        let usage = res.toJSON()
+        console.log(usage)
+        let usageId = usage.id
+        if (data.usage.usageBreakdown) {
+          Promise.all(data.usage.usageBreakdown.map((u, i) => {
+            return UsageLine.addUsageLine({usage_id: usageId, line_id: lineIdArray[i], usage_amount: u.monthlyUsage})
+          }))
+          .then(res => {
+            // console.log(data)
+            response.status(200).json(data)
+            nightmare.end()
+          })
+        } else {
+          response.status(200).json(data)
+          nightmare.end()
+        }
+     })
     })
     .catch(err => {
       getBillIfAccordion()

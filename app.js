@@ -1,3 +1,4 @@
+require('dotenv').config()
 const express = require('express')
 const { json, urlencoded } = require('body-parser') 
 const app = express()
@@ -15,7 +16,6 @@ app.post('/verizon', (req, response, next) => {
 app.post('/att', (req, response, next) => {
   crawlAtt(req, response, next)
 })
-
 
 const port = process.env.PORT || 8084;
 
